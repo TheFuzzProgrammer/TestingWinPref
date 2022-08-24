@@ -129,10 +129,6 @@
   <ItemGroup>
     <ClCompile Include="Source.cpp" />
   </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="extRef.h" />
-    <ClInclude Include="reference.h" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
