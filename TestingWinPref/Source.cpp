@@ -8,11 +8,44 @@
 #include <cassert>
 #include <vector>
 #pragma comment(lib, "wbemuuid.lib")
+#include <thread>
+
+int processSearch();
+int getCoreNumber();
+
+class Process {
+    DWORD dwMemory;
+    DWORD dwCpu;
+    DWORD dwPid;
+    BSTR  bstrName;
+
+public: Process(DWORD _mem, DWORD _cpu, DWORD _pid, BSTR _name) {
+    dwMemory = _mem;
+    dwCpu = _cpu;
+    dwPid = _pid;
+    bstrName = _name;
+}
+      bool ToJson(BSTR _filePath) {
+
+          std::string;
+
+          return false;
+      }
+};
 
 int __cdecl wmain(int argc, wchar_t* argv[])
 {
-    //<GENERAL PROCESES CECL>
+    while (true) {
+        processSearch();
+        Sleep(10000);
+    }
+    return 0;
+}
 
+int processSearch() {
+    //<GENERAL PROCESES CECL>
+    std::vector<Process*> svAllProcess;
+    Process* pcurrentProcess;
     IWbemRefresher* pRefresher = NULL; //refresher
     IWbemConfigureRefresher* pConfig = NULL; //setter for refresher's env 
     IWbemHiPerfEnum* pEnum = NULL;
@@ -32,20 +65,17 @@ int __cdecl wmain(int argc, wchar_t* argv[])
     DWORD                   dwVirtualBytes = 0;
 
     //<PROCESSES ID DECL>
-
-    DWORD                   dwProcessId = 0;
-    DWORD                   dwIDProcess = 0;
+    
     long                    lIDProcessHandle = 0;
+    DWORD                   dwIDProcess = 0;
 
     //<PERCENT PROCESSOR DECL>
 
-    BSTR* NameKW = new BSTR();
     HRESULT                 hr = S_OK;
     long                    lPercentProcessorTime = 0;
 
     //<PROCESSOR INFO decl>
-    long                    lThreadCount = 0;
-    long                    lCoresCounter = 0;
+
     DWORD                   dwCPU_TIME = 0;
     DWORD                   dwCPU_THREADS_NUMBER = 0;
 
@@ -53,7 +83,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
 
     BSTR* bstrProcessName = new BSTR();
     long lProcessNameHandler = 0;
-    VARIANT varProcessNameResult;
+    VARIANT* varProcessNameResult = new VARIANT();
 
 
     //<PREPARING ENV>
@@ -70,7 +100,6 @@ int __cdecl wmain(int argc, wchar_t* argv[])
         NULL, // Authority
         NULL, // Wbem context
         &pNameSpace); //------>Server provider or host
-
     pWbemLocator->Release();
     pWbemLocator = NULL;
     SysFreeString(bstrNameSpace);
@@ -80,9 +109,6 @@ int __cdecl wmain(int argc, wchar_t* argv[])
     hr = pConfig->AddEnum(pNameSpace, L"Win32_PerfRawData_PerfProc_Process", 0, NULL, &pEnum, &lID);
     pConfig->Release();
     pConfig = NULL;
-
-    // Get a property handle for the VirtualBytes property.
-
     // Refresh the object ten times and retrieve the value.
     for (x = 0; x < 1; x++)
     {
@@ -99,6 +125,7 @@ int __cdecl wmain(int argc, wchar_t* argv[])
             if (NULL == apEnumAccess)
             {
                 hr = E_OUTOFMEMORY;
+                goto end;
             }
             SecureZeroMemory(apEnumAccess, dwNumReturned * sizeof(IWbemObjectAccess*));
             dwNumObjects = dwNumReturned;
@@ -106,42 +133,98 @@ int __cdecl wmain(int argc, wchar_t* argv[])
         }
 
         // First time through, get the handles.
-        if (0 == x)
+        if (x==0)
         {
             CIMTYPE VirtualBytesType;
             CIMTYPE ProcessHandleType;
             CIMTYPE CpuUsageHandleType;
-            CIMTYPE NumberOfCPUCores;
             apEnumAccess[0]->GetPropertyHandle(L"VirtualBytes", &VirtualBytesType, &lVirtualBytesHandle);
             apEnumAccess[0]->GetPropertyHandle(L"IDProcess", &ProcessHandleType, &lIDProcessHandle);
             apEnumAccess[0]->GetPropertyHandle(L"PercentProcessorTime", &CpuUsageHandleType, &lPercentProcessorTime);
+            //delete &VirtualBytesType;
+            //delete &ProcessHandleType;
+            //delete &CpuUsageHandleType;
         }
 
         for (i = 0; i < dwNumReturned; i++)
         {
-            apEnumAccess[i]->Get(L"Name", 0, &varProcessNameResult, NULL, NULL);
+            apEnumAccess[i]->Get(L"Name", 0, varProcessNameResult, NULL, NULL);
             apEnumAccess[i]->ReadDWORD(lVirtualBytesHandle, &dwVirtualBytes);
             apEnumAccess[i]->ReadDWORD(lIDProcessHandle, &dwIDProcess);
             apEnumAccess[i]->ReadDWORD(lPercentProcessorTime, &dwCPU_TIME);
-            apEnumAccess[i]->ReadDWORD(lThreadCount, &dwCPU_THREADS_NUMBER);
+            dwCPU_THREADS_NUMBER = getCoreNumber();
 
             //<ASSIGN REAL VALUES>
 
-            bstrProcessName = &varProcessNameResult.bstrVal;
-            assert(NameKW != nullptr);
+            *bstrProcessName = varProcessNameResult->bstrVal;
+            assert(bstrProcessName != nullptr);
             std::wstring ws(*bstrProcessName, SysStringLen(*bstrProcessName));
 
             dwVirtualBytes = dwVirtualBytes / 1048576;
+            dwCPU_TIME = dwCPU_TIME / dwCPU_THREADS_NUMBER;
+            if (dwCPU_TIME > 0 || dwVirtualBytes > 0) {
+                pcurrentProcess = new Process(dwVirtualBytes, dwCPU_TIME, dwIDProcess, *bstrProcessName);
+                svAllProcess.push_back(pcurrentProcess);
+            }          
 
             wprintf(L"El proceso %ls PID: % lu usa % lu MB de memoria y % lu cpu en % lu hilos\n", &ws[0], dwIDProcess, dwVirtualBytes, dwCPU_TIME, dwCPU_THREADS_NUMBER);
             apEnumAccess[i]->Release();
-            apEnumAccess[i] = NULL;
         }
 
         delete[] apEnumAccess;
         apEnumAccess = NULL;
-
+    
+    end:
+        delete varProcessNameResult;
+    if (NULL != bstrNameSpace)
+    {
+        SysFreeString(bstrNameSpace);
     }
 
-    return 0;
+    if (NULL != apEnumAccess)
+    {
+        for (i = 0; i < dwNumReturned; i++)
+        {
+            if (apEnumAccess[i] != NULL)
+            {
+                apEnumAccess[i]->Release();
+                apEnumAccess[i] = NULL;
+            }
+        }
+        delete[] apEnumAccess;
+    }
+    if (NULL != pWbemLocator)
+    {
+        pWbemLocator->Release();
+    }
+    if (NULL != pNameSpace)
+    {
+        pNameSpace->Release();
+    }
+    if (NULL != pEnum)
+    {
+        pEnum->Release();
+    }
+    if (NULL != pConfig)
+    {
+        pConfig->Release();
+    }
+    if (NULL != pRefresher)
+    {
+        pRefresher->Release();
+    }
+
+    CoUninitialize();
+
+    if (FAILED(hr))
+    {
+        wprintf(L"Error status=%08x\n", hr);
+    }
+        return 1;
+    }
+}
+
+int getCoreNumber(void) {  
+    unsigned int cores = std::thread::hardware_concurrency();
+    return cores; 
 }
