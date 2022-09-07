@@ -1,14 +1,15 @@
-#pragma once
 #define _WIN32_DCOM
-
-//Win32_Processor
+#define _WINSOCKAPI_ 
 
 #include <iostream>
 #include <Wbemidl.h>
 #include <cassert>
 #include <vector>
-#pragma comment(lib, "wbemuuid.lib")
 #include <thread>
+#include <WinSock2.h>
+#pragma comment(lib, "ws2_32")
+#pragma comment(lib, "wbemuuid.lib")
+
 
 int processSearch();
 int getCoreNumber();
@@ -27,18 +28,60 @@ public: Process(DWORD _mem, DWORD _cpu, DWORD _pid, BSTR _name) {
 }
       bool ToJson(BSTR _filePath) {
 
-          std::string;
+          std::string str;
 
           return false;
       }
 };
 
+class SocketListener {
+private:
+    char cMessage[10];
+    SOCKET pListenerSocket;
+    SOCKET pSpeakerSocket;
+    SOCKADDR_IN pListenerADDR;
+    SOCKADDR_IN pClientADDR;    
+    WSADATA *wsaData;
+public:
+    SocketListener() {
+        wsaData = new WSADATA();
+        if (WSAStartup(MAKEWORD(AF_INET,NULL), wsaData) == NULL) {
+            pListenerSocket = socket(AF_INET, SOCK_STREAM, NULL);
+            pListenerADDR.sin_addr.s_addr = INADDR_ANY;
+            pListenerADDR.sin_family = AF_INET;
+            pListenerADDR.sin_port = htons(8181); //tcp port
+            bind(pListenerSocket, (SOCKADDR*)&pListenerADDR, sizeof(pListenerADDR));
+            listen(pListenerSocket, NULL);
+            wprintf(L"listening \n");
+            int cAddr = sizeof(&pClientADDR);
+            if ((pSpeakerSocket = accept(pListenerSocket, (SOCKADDR*)&pClientADDR, &cAddr))!= INVALID_SOCKET) {
+                wprintf(L"connection sucess! listening \n");
+            }
+        }
+        else {
+            wprintf(L"FATAL \n");
+        }
+    }
+    std::string* Listen() {
+        recv(this->pSpeakerSocket, cMessage, sizeof(cMessage), NULL);
+        return new std::string(cMessage);
+     }
+private:
+    void DeleteMessage() {
+        memset(cMessage, NULL, sizeof(cMessage));
+        return;
+    }
+};
+
 int __cdecl wmain(int argc, wchar_t* argv[])
 {
+    SocketListener* pListener = new SocketListener();
     while (true) {
-        processSearch();
-        Sleep(10000);
+        if (*pListener->Listen() == "write") {
+            processSearch();
+        }
     }
+
     return 0;
 }
 
